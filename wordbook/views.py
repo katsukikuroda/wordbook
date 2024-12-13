@@ -2,10 +2,38 @@ from django.shortcuts import render, redirect, get_object_or_404  # 追加
 from django.urls import reverse  # 追加
 from urllib.parse import urlencode  # 追加
 from .models import Word  # 追加
+import re # 追加機能
 
 def index(request):
     return render(request, "wordbook/index.html")
 
+# def register(request):
+#     try:
+#         context = {
+#             "message": request.GET["message"],
+#         }
+#     except:
+#         context = {}
+
+#     if request.method == "POST":
+
+#         en_word = request.POST["en_word"]
+#         ja_word = request.POST["ja_word"]
+
+#         Word.objects.create(en_word=en_word, ja_word=ja_word)
+
+#         redirect_url = reverse("wordbook:register")
+#         params = urlencode(
+#             {
+#                 "message": en_word + "が作成されました。",
+#             }
+#         )
+#         url = redirect_url + "?" + params
+#         return redirect(url)
+
+#     return render(request, "wordbook/register.html", context)
+
+# ↓追加機能
 def register(request):
     try:
         context = {
@@ -19,18 +47,36 @@ def register(request):
         en_word = request.POST["en_word"]
         ja_word = request.POST["ja_word"]
 
-        Word.objects.create(en_word=en_word, ja_word=ja_word)
+        if _is_english(en_word) and _is_japanese(ja_word):  # 追加
+            Word.objects.create(en_word=en_word, ja_word=ja_word)
+            message = en_word + "が作成されました。"
+        else:
+            message = "正しい文字列を入力してください。"
 
         redirect_url = reverse("wordbook:register")
         params = urlencode(
             {
-                "message": en_word + "が作成されました。",
+                "message": message,  # 変更
             }
         )
         url = redirect_url + "?" + params
         return redirect(url)
 
     return render(request, "wordbook/register.html", context)
+
+
+def _is_english(word):  # 追加
+    pattern = re.compile("[a-zA-Z]+")
+    result = pattern.fullmatch(word)
+    return bool(result)
+
+
+def _is_japanese(word):  # 追加
+    pattern = re.compile("[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]+")
+    result = pattern.fullmatch(word)
+    return bool(result)
+#↑追加機能ここまで
+
 
 def select(request):  # 追加
     if request.method == "POST":
@@ -73,8 +119,28 @@ def quiz(request):  # 追加
     if how_many > all_word_counts:
         how_many = all_word_counts
 
+    # if request.method == "GET":
+    #     words = all_words.order_by("?")[:how_many]
+
+    #     context = {
+    #         "mode": mode,
+    #         "style": style,
+    #         "how_many": how_many,
+    #         "words": words,
+    #     }
+    # ↓追加機能
     if request.method == "GET":
-        words = all_words.order_by("?")[:how_many]
+        if style == "often_wrong":
+            if mode == "en_to_ja":
+                words = all_words.filter(en_to_ja_correct_count__lt=3).order_by(
+                    "-en_to_ja_incorrect_count"
+                )[:how_many]
+            else:
+                words = all_words.filter(ja_to_en_correct_count__lt=3).order_by(
+                    "-ja_to_en_incorrect_count"
+                )[:how_many]
+        else:
+            words = all_words.order_by("?")[:how_many]
 
         context = {
             "mode": mode,
@@ -82,6 +148,8 @@ def quiz(request):  # 追加
             "how_many": how_many,
             "words": words,
         }
+    #↑追加機能ここまで
+
 
     elif request.method == "POST":
         info = {
